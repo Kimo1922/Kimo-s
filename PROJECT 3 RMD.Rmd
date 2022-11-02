@@ -1,0 +1,215 @@
+---
+title: "Project 3"
+author: "Laurian Kimolo"
+date: "12/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(caret)
+library(forcats)
+library(plotROC)
+library(ggplot2)
+```
+
+## Data import and data preparation.
+
+-The World Happiness Report is a landmark survey of the state of global happiness. Leading experts across fields – economics, psychology, survey analysis, national statistics, health, public policy and more – describe how measurements of well-being can be used effectively to assess the progress of nations. The reports review the state of happiness in the world today and show how the new science of happiness explains personal and national variations in happiness.
+
+- After viewing the raw numeric data in excel I decided to import the data files using the *readr* package.
+
+- In importing the datasets the data variables were not named so the variables containing the data were named after looking at the data background from kaggle.
+
+- Also in the dataset 2017 the variable region was not present as in the dataset for 2015 and 2016 so a duplication of the region variable into the 2017 dataset had to be done from binding the region variable from the datasets for 2015 and 2016.
+
+- Since the datasets weren't fully prepared data prep was done using dplyr.
+
+
+```{r}
+df2015 <- read.csv("/Users/Lau/Documents/Project 3/2015.csv",
+                   col.names=c("Country","Region","Rank","Score","SE","GDP",
+                               "Family","Health","Freedom","Trust","Generosity",
+                               "Dystopia"))
+df2015$Year <- 2015
+df2016 <- read.csv("/Users/Lau/Documents/Project 3/2016.csv",
+                   col.names=c("Country","Region","Rank","Score","LCI","UCI",
+                               "GDP","Family","Health","Freedom","Trust",
+                               "Generosity","Dystopia"))
+df2016$Year <- 2016
+df2017 <- read.csv("/Users/Lau/Documents/Project 3/2017.csv",
+                   col.names=c("Country","Rank","Score","Q3","Q1",
+                               "GDP","Family","Health","Freedom","Generosity",
+                               "Trust","Dystopia"))
+df2017$Year <- 2017
+dfRegion <- rbind(df2016[,c("Country","Region")],df2015[,c("Country","Region")]
+)
+dfRegion <- dfRegion[!duplicated(dfRegion),]
+df2017 <- df2017 %>%
+  left_join(dfRegion) %>%
+  select(Country, Region, everything())
+df2015 <- df2015 %>%
+  select(Country, Region, Rank, Score, GDP, Family, Health, Freedom,
+         Generosity, Trust, Dystopia, Year)
+df2016 <- df2016 %>%
+  select(Country, Region, Rank, Score, GDP, Family, Health, Freedom,
+         Generosity, Trust, Dystopia, Year)
+df2017 <- df2017 %>%
+  select(Country, Region, Rank, Score, GDP, Family, Health, Freedom,
+         Generosity, Trust, Dystopia, Year)
+happy <- rbind(df2015, df2016, df2017)
+
+```
+
+## Creating train and test datasets for my models.
+
+```{r}
+customLR <- happy %>%
+  select(Score, Family, GDP, Freedom) %>%
+  mutate(Score = ifelse(Score >= 5, 1,0),
+         Score = factor(Score)) %>%
+  mutate(Score=fct_recode(Score,"NotHappy"="0","Happy"="1"),
+         Score = factor(Score)) %>%
+  select(Score, Family, GDP, Freedom)
+customKNN <- happy %>%
+  select(Score, Family,Trust,Freedom) %>%
+  mutate(Score = ifelse(Score >= 5, 1,0),
+         Score = factor(Score)) %>%
+  mutate(Score=fct_recode(Score,"NotHappy"="0","Happy"="1"),
+         Score = factor(Score)) %>%
+  select(Score, Family,Trust,Freedom)
+customNB <- happy %>%
+  select(Score, Region,Rank,Family) %>%
+  mutate(Score = ifelse(Score >= 5, 1,0),
+         Score = factor(Score)) %>%
+  mutate(Score=fct_recode(Score,"NotHappy"="0","Happy"="1"),
+         Score = factor(Score),
+         Region = factor(Region)) %>%
+  select(Score, Family,Trust,Freedom)
+customNB$Rank <- cut(customNB$Rank, breaks=c(0,.34,.68,max(trainNB$Fare)), include.lowest = TRUE, labels = c("Cheap","Moderate","Expensive"))
+tidx <- sample(nrow(customLR),.8*nrow(customLR))
+trainLR <- customLR[tidx,]
+testLR <- customLR[-tidx,]
+tidx <- sample(nrow(customKNN),.8*nrow(customKNN))
+trainKNN <- customKNN[tidx,]
+testKNN <- customKNN[-tidx,]
+```
+
+
+## Transforming training data(Logistic regression.)
+
+- After trying to see which variables were significant to the model, by looking at the summary of the model including all the variables, after a couple tries the variables of *family*, *gdp*, and *freedom* were most significant. These variables decreased the AIC to as low as I could get it.
+- Since the variable *score* was scored on a scale of 1 to 10; with 1 being least happy and 10 being the most happy, I re coded it to 2 levels greater and less than 5 and to fit that binary categorical outcome.
+- I chose those as my 3 variables of interest.
+- There were no NA values in any of my data variables used so no replacements or imputations were necessary.
+
+## Building model
+
+- to build the model I had to first create a k fold validation control metric. I used the metric that was provided by professor Portier.
+
+- Since we are building a logistic regression model I used the binomial family to support that idea of a logical categorical outcome.
+```{r}
+set.seed(1) #Set seed to ensure reproducible results
+fitControl = trainControl(method = "repeatedcv", number = 10, 
+                          repeats = 20, 
+                          summaryFunction = twoClassSummary,
+                          classProbs = TRUE, savePredictions = all())
+LRmod <- train(Score ~., data = trainLR, 
+                          method = "glm", family="binomial",
+                          preProcess = c("center", "scale"),
+                          trControl = fitControl,
+                          metric = "ROC")
+```
+
+## Evaluating in sample
+
+- We can see that in our sample with the variables that we chose that our model to predict happiness in sample that we were 86% accurate.
+
+- We also see that our model was precise 87% of the time that we predicted when people were happy considering if they were actually happy or not.
+
+- Considering that the 3 variables that we chose were statistically significant this is a valid connection to make. 
+
+- To get deeper into this let us look at the measures of sensitivity and specificity. For this model the event that we were looking for is maximizing happiness. In this world we all want to be happy. So let us see how this model did.
+- This model predicted that 87% of the time that if a person was happy in our training set then the model predicted that they were happy. It also predicted that 84% of the time that a person was not happy that they were not happy. So the true positive and true negative rates percentages are good enough for this model.
+```{r}
+trainLR$Prob <- LRmod$finalModel$fitted.values
+HappyPred <- function(prob,t) factor(ifelse(prob > t ,"Happy","NotHappy"))
+trainLR$HappyPred <- HappyPred(trainLR$Prob,.5)
+confusionMatrix(trainLR$Score,trainLR$HappyPred,positive="Happy")
+```
+
+## Visualization ROC plot
+
+- We can see that as we move our threshold that our line trends closer and closer to that 1 value on our true positive rate. So this model shows us more validity . We also have an area under the curve which 92% so I think the threshold is also valid.
+```{r}
+plot <- ggplot(trainLR, aes(d = as.numeric(Score)-1, m = Prob)) + geom_roc(cutoffs.at=seq(0,1,.1))
+plot + annotate(geom="text", x=.5, y=.5, 
+                label=calc_auc(plot)$AUC)
+```
+
+## Evaluating logistic regression model out of sample.
+
+```{r}
+testLR$Prob <- predict(LRmod, newdata=testLR, type="prob")
+testLR$Happy <- HappyPred(testLR$Prob$Yes,0.5)
+```
+
+
+## Initial thoughts about KNN Model.
+
+- For this model I went ahead and used the quantitative features of trust, freedom and family. I think that the amount of trust a person has in their government, the amount of freedom they have, and their families could really affect their happiness score. I feel like this is more of like how do these sentimental parameters affect happiness. That is the approach I am taking with this model.
+
+## Building model/Optimal value *k*
+
+- With the code chunk below I am creating a k fold cross validation control.
+- It looks like the optimal *k* value for my model is 7. What this means that when we build our model our results on if the happiness score is happy or not will be classified within the 7 nearest values.
+
+```{r}
+set.seed(1) #Set seed to ensure reproducible results
+fitControl <- trainControl(method = "repeatedcv", number = 20, 
+                          repeats = 10,
+                          classProbs = TRUE, savePredictions = all())
+KNNMod <- train(Score ~., data = trainKNN, 
+                          method = "knn",
+                          preProcess = c("center", "scale"),
+                          trControl = fitControl)
+KNNMod
+```
+
+## Evaluate In Sample
+
+- How did the model do with the training data?
+- Calculate variety of evaluation metrics
+  + Accuracy
+  + Precision
+  + Sensitivity
+  + Specificity
+  
+```{r}
+trainKNN$Prob <- predict(KNNMod, trainKNN, type="prob")$Yes
+trainKNN$Class <- predict(KNNMod, trainKNN)
+trainKNN$HappyPred <- HappyPred(trainKNN$Prob,0.5)
+table(trainKNN$Class,trainKNN$HappyPred)
+trainKNN[trainKNN$Class!=trainKNN$HappyPred,c("Class","HappyPred","Prob")]
+confusionMatrix(trainKNN$Score,trainKNN$HappyPred,positive="Yes")
+```
+
+#NB MODEL TROUBLESHOOTING/TRIALS
+
+```{r}
+traintrial1 <- happy %>%
+  select(Score, Region,Freedom,Family,Trust, Rank) %>%
+  mutate(Score = ifelse(Score >= 5, 1,0),
+         Score = factor(Score)) %>%
+  mutate(Score=fct_recode(Score,"NotHappy"="0","Happy"="1"),
+         Score = factor(Score)) %>%
+  select(Score, Region, Rank) %>%
+  na.omit()
+traintrial1$Rank <- cut(traintrial1$Rank,breaks = quantile(traintrial1$Rank, c(0, 0.25, 0.5, 0.75, 1)),labels = c("1stquantile", "2ndquantile", "3rdquantile", "4thquantile"),right  = FALSE,include.lowest = TRUE)
+traintrialmod1 <- naiveBayes(Score~.,traintrial1,laplace = 0)
+traintrialmod1
+```
+

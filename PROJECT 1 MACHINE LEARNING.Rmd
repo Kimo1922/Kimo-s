@@ -1,0 +1,66 @@
+---
+title: "PROJECT 1 MACHINE LEARNING."
+author: "Laurian Kimolo"
+date: "9/14/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+data("fandango", package="fivethirtyeight")
+library(ggplot2)
+library(dplyr)
+```
+
+## Data background
+
+- The dataset fandango contains ratings of different movies and films. The description says that we should be suspicious of Online Movie ratings, especially fandango’s. The data does not have any missing values. The number of rows and column align to what we expected(23 columns 146 rows).
+
+## Initial look at focused variables *rottentomatoes* and *rottentomatoes_user*
+
+- These two variables are the focused variables asked for by they client.
+- The goal is to find if there is a relationship or some type of pattern between the 2 variables mentioned above.
+- As silly as it sounds my first hypothesis is that, considering that they both have "rottentomatoes" in their names there would be a relationship between the two variables.
+- Looking at the summary of these two variables nothing stands out and the data does not look out the ordinary.
+
+## Simple Linear regression model
+
+- Both of the variables *rottentomatoes* and *rottentomatoes_user* are quantitative variables which makes them valid for this model.
+- Using the *lm* function I was able to create the abstraction from this data which is an equation that we can re use.
+
+```{r}
+mod <- lm(rottentomatoes~rottentomatoes_user, fandango)
+mod
+summary(mod)
+```
+
+## Plot of the linear regression model
+
+- The plot shows us this concept of a best fit line.
+- I used the *geom_smooth* with the *geom_abline* paired with the linear model method to show the line that would best fit this model.
+- The *geom_point* function shows the data of our variables in the plot.
+
+```{r}
+b <- cov(fandango$rottentomatoes_user,fandango$rottentomatoes)/var(fandango$rottentomatoes_user)
+a <- mean(fandango$rottentomatoes)-b*mean(fandango$rottentomatoes_user)
+ggplot(fandango, aes(rottentomatoes_user,rottentomatoes)) + geom_point(color="red") + geom_abline(slope = 1.177,intercept = -14.354,color="red") + geom_abline(intercept = a,slope = b,linetype=2, color="blue") + geom_smooth(method="lm",se=FALSE)
+```
+
+## Interpreting model results in terms of our data.
+
+- Using the *cor(fandango$rottentomatoes_user,fandango$rottentomatoes)* function I was able to determine that there was a correlation of 78 percent between the variables *rottentomatoes* and *rottentomatoes_user*. 
+
+- When we look at the summary of the model we see that the estimated average value of the rottentomatoes score when the rottentomatoes user score is 0 is equal to -14.35380. We also see that the estimated average change for the rottentomatoes user score as the units go up. is 1.17. It is significant to know this because this is the abstraction/equation that we got for our linear model.
+
+- In terms of the of what the metadata tells us and some background knowledge this means that there is a 78% percent match between the professional raters who rate the films for rottentomatoes and the users who rate the films.
+
+```{r}
+cor(fandango$rottentomatoes_user,fandango$rottentomatoes)
+summary(mod)
+```
+
+## Client next steps
+
+- The client next steps should be diving deeper into this into maybe classifying the the two variables focused in this problem and try to match that into the films and see how these variables match up to the film.
